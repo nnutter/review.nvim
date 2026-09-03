@@ -29,6 +29,7 @@ Features:
 - Comments persist per branch across sessions
 - Export format optimized for AI conversations
 - Commit picker to review specific revision ranges
+- Temporary source-file peek without leaving the review
 - Readonly and edit modes with separate keymap sets
 
 ==============================================================================
@@ -179,6 +180,7 @@ ACTIONS                                               *review-keymaps-actions*
     `S`           Send to sidekick.nvim                  |n|
     `<C-r>`       Clear all comments                     |n|
     `R`           Toggle readonly/edit mode               |n|
+    `p`           Peek source file; q or Esc returns       |n|
     `q`           Export & close review (overrides        |n|
                   codediff's quit on diff panes)         |n|
     `?`           Show help popup                         |n|
