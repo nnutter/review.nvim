@@ -10,10 +10,26 @@ local current_tabpage = nil
 ---@type number|nil Autocmd group for buffer events
 local buf_augroup = nil
 
+---Get a string path from CodeDiff's path reference.
+---Older CodeDiff versions returned strings; newer versions return a table with
+---absolute and relative fields.
+---@param path string|table|nil
+---@return string|nil
+local function path_string(path)
+  if type(path) == "table" then
+    if path.absolute and path.absolute ~= "" then
+      return path.absolute
+    end
+    return path.relative
+  end
+  return path
+end
+
 ---Set filetype for a buffer based on file path
 ---@param bufnr number
----@param path string|nil
+---@param path string|table|nil
 local function set_buffer_filetype(bufnr, path)
+  path = path_string(path)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
@@ -60,7 +76,8 @@ end
 ---@param tabpage number
 ---@return string|nil
 local function relativize_path(path, lifecycle, tabpage)
-  if not path then
+  path = path_string(path)
+  if not path or path == "" then
     return nil
   end
   local git_ctx = lifecycle.get_git_context(tabpage)
@@ -261,5 +278,9 @@ function M.on_file_changed(tabpage)
     marks.refresh()
   end, 50)
 end
+
+M._test = {
+  path_string = path_string,
+}
 
 return M
