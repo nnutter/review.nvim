@@ -3,6 +3,7 @@ local M = {}
 local config = require("review.config")
 local comments = require("review.comments")
 local export = require("review.export")
+local peek = require("review.peek")
 
 -- Track which buffers have keymaps set and what keys were mapped
 local keymapped_buffers = {}
@@ -160,6 +161,7 @@ local function show_help()
   entry("list_comments", "List comments", nav_entries)
 
   entry("export_clipboard", "Export to clipboard", action_entries)
+  entry("peek_source", "Peek source file", action_entries)
   entry("send_sidekick", "Send to sidekick", action_entries)
   entry("clear_comments", "Clear all", action_entries)
   entry("toggle_readonly", "Toggle readonly/edit", action_entries)
@@ -248,6 +250,17 @@ end
 local function set_buffer_keymaps(tabpage, bufnr)
   -- Clear existing keymaps first
   clear_buffer_keymaps(bufnr)
+
+  -- A source buffer temporarily replaces a diff pane while peeking. It must
+  -- not receive the normal review mappings, especially q (which closes the
+  -- review); peek owns only the mappings needed to return to the diff.
+  -- This runs before the diff-buffer check: the source buffer can itself
+  -- be one of the session's diff buffers (working-tree side).
+  if peek.is_active_buffer(bufnr) then
+    keymapped_buffers[bufnr] = nil
+    peek.setup_keymaps(bufnr)
+    return
+  end
 
   local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
   if ok and not is_diff_buffer(lifecycle, tabpage, bufnr) then
@@ -351,6 +364,7 @@ local function set_buffer_keymaps(tabpage, bufnr)
   -- Close deliberately overrides codediff's view.quit on diff buffers so
   -- q always means export-and-close inside a Review session.
   set(km.close, function() require("review").close() end, "Close", CLOSE_PRIORITY)
+  set(km.peek_source, function() peek.open() end, "Peek source file")
   set(km.toggle_readonly, function() require("review").toggle_readonly() end, "Toggle readonly mode")
   set(km.show_help, show_help, "Show help")
 
@@ -394,6 +408,21 @@ function M.setup_keymaps(tabpage)
       set_buffer_keymaps(tabpage, vim.api.nvim_get_current_buf())
     end,
   })
+end
+
+-- Re-apply mappings to every window in a CodeDiff tab. This is needed when
+-- source peek changes a buffer that is also visible in another diff pane.
+---@param tabpage number
+function M.reapply_keymaps(tabpage)
+  if not tabpage or not vim.api.nvim_tabpage_is_valid(tabpage) then
+    return
+  end
+
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tabpage)) do
+    if vim.api.nvim_win_is_valid(win) then
+      set_buffer_keymaps(vim.api.nvim_win_get_buf(win))
+    end
+  end
 end
 
 -- Clear keymaps from all tracked buffers

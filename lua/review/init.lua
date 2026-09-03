@@ -136,6 +136,9 @@ function M.open_commits(rev1, rev2)
 end
 
 function M.close()
+  -- Return from a temporary source peek before closing the review tab.
+  require("review.peek").close()
+
   -- Export comments to clipboard before closing
   local count = store.count()
   if count > 0 then

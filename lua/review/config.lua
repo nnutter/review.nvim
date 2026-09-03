@@ -31,6 +31,7 @@ local M = {}
 ---@field next_file string|false
 ---@field prev_file string|false
 ---@field toggle_file_panel string|false
+---@field peek_source string|false
 ---@field readonly_add string|false
 ---@field readonly_delete string|false
 ---@field readonly_edit string|false
@@ -68,6 +69,7 @@ M.defaults = {
     next_file = "<Tab>",
     prev_file = "<S-Tab>",
     toggle_file_panel = "f",
+    peek_source = "p",
     -- Common actions
     list_comments = "c",
     export_clipboard = "C",

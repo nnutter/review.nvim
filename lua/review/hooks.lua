@@ -255,6 +255,7 @@ end
 
 -- Called when codediff session is closed
 function M.on_session_closed()
+  require("review.peek").on_session_closed()
   current_tabpage = nil
   -- Clean up autocmds
   if buf_augroup then
