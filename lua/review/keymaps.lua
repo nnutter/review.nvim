@@ -410,18 +410,12 @@ function M.setup_keymaps(tabpage)
   })
 end
 
--- Re-apply mappings to every window in a CodeDiff tab. This is needed when
--- source peek changes a buffer that is also visible in another diff pane.
----@param tabpage number
-function M.reapply_keymaps(tabpage)
-  if not tabpage or not vim.api.nvim_tabpage_is_valid(tabpage) then
-    return
-  end
-
-  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tabpage)) do
-    if vim.api.nvim_win_is_valid(win) then
-      set_buffer_keymaps(vim.api.nvim_win_get_buf(win))
-    end
+-- Re-apply mappings to one buffer, e.g. after source peek replaced it
+-- temporarily.
+---@param bufnr number
+function M.apply_for_buffer(bufnr)
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    set_buffer_keymaps(bufnr)
   end
 end
 

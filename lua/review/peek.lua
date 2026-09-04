@@ -9,6 +9,7 @@ local M = {}
 ---@field view table
 ---@field winopts table<string, any>
 ---@field cleared_bufnr number|nil
+---@field diff_bufhidden string|nil
 local state = nil
 
 local function notify(message, level)
@@ -301,7 +302,13 @@ function M.open()
     view = view,
     winopts = save_window_options(win),
     cleared_bufnr = nil,
+    diff_bufhidden = vim.bo[current_bufnr].bufhidden,
   }
+
+  -- Virtual diff buffers are wiped as soon as they lose their last window,
+  -- which would destroy the session's buffer while the source file is shown.
+  -- Keep the buffer alive until the peek closes.
+  vim.bo[current_bufnr].bufhidden = "hide"
 
   local opened, source_bufnr = pcall(get_source_buffer, win, path)
   if not opened or not is_valid_buffer(source_bufnr) then
@@ -313,7 +320,9 @@ function M.open()
 
   state.cleared_bufnr = clear_diff_decorations(source_bufnr, original_bufnr, modified_bufnr)
 
-  require("review.keymaps").reapply_keymaps(tabpage)
+  -- Strip the review mappings from the source buffer (it must not answer to
+  -- q/close) and install the peek mappings; other buffers are left untouched.
+  require("review.keymaps").apply_for_buffer(source_bufnr)
 
   local source_line = cursor[1]
   if current_bufnr == original_bufnr then
@@ -345,6 +354,10 @@ function M.close()
       vim.api.nvim_set_current_win(current.win)
       vim.api.nvim_win_set_buf(current.win, current.diff_bufnr)
 
+      if current.diff_bufhidden then
+        vim.bo[current.diff_bufnr].bufhidden = current.diff_bufhidden
+      end
+
       for option, value in pairs(current.winopts) do
         vim.wo[current.win][option] = value
       end
@@ -358,9 +371,22 @@ function M.close()
 
   restore_diff_decorations(current.tabpage, current.cleared_bufnr)
 
+  -- Restore review mappings on the buffers peek touched. The diff buffer lost
+  -- nothing but the peek guard, and the source buffer may have been one of the
+  -- session's diff buffers (working-tree side) whose mappings were stripped.
   local keymaps_ok, keymaps = pcall(require, "review.keymaps")
   if keymaps_ok then
-    keymaps.reapply_keymaps(current.tabpage)
+    keymaps.apply_for_buffer(current.diff_bufnr)
+    if current.source_bufnr ~= current.diff_bufnr then
+      local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
+      local session = ok and lifecycle.get_session(current.tabpage) or nil
+      if session then
+        local orig_bufnr, mod_bufnr = lifecycle.get_buffers(current.tabpage)
+        if current.source_bufnr == orig_bufnr or current.source_bufnr == mod_bufnr then
+          keymaps.apply_for_buffer(current.source_bufnr)
+        end
+      end
+    end
   end
 end
 
@@ -370,6 +396,9 @@ function M.on_session_closed()
     return
   end
   M.clear_keymaps(state.source_bufnr)
+  if state.diff_bufhidden and state.diff_bufnr and vim.api.nvim_buf_is_valid(state.diff_bufnr) then
+    vim.bo[state.diff_bufnr].bufhidden = state.diff_bufhidden
+  end
   state = nil
 end
 
