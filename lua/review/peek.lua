@@ -67,6 +67,21 @@ local function map_original_line(diff_result, line)
   return math.max(1, line + offset)
 end
 
+--- Clamp a column to the target line so cursor placement cannot fail when
+--- the source line is shorter than the diff line the cursor came from.
+---@param bufnr number
+---@param line number
+---@param col number
+---@return number
+local function clamp_column(bufnr, line, col)
+  if col <= 0 then
+    return 0
+  end
+  local lines = vim.api.nvim_buf_get_lines(bufnr, line - 1, line, false)
+  local line_length = #(lines[1] or "")
+  return math.min(col, line_length)
+end
+
 local function get_source_buffer(win, path)
   local ok, helpers = pcall(require, "codediff.ui.view.helpers")
   if ok and helpers.open_real_file then
@@ -305,10 +320,11 @@ function M.open()
     source_line = map_original_line(session.stored_diff_result, source_line)
   end
   source_line = math.min(math.max(source_line, 1), vim.api.nvim_buf_line_count(source_bufnr))
+  local source_col = clamp_column(source_bufnr, source_line, cursor[2])
 
   vim.api.nvim_set_current_win(win)
   set_source_window_options(win)
-  pcall(vim.api.nvim_win_set_cursor, win, { source_line, 0 })
+  pcall(vim.api.nvim_win_set_cursor, win, { source_line, source_col })
   vim.api.nvim_win_call(win, function()
     vim.cmd("normal! zz")
   end)
@@ -367,6 +383,7 @@ end
 
 M._test = {
   map_original_line = map_original_line,
+  clamp_column = clamp_column,
 }
 
 return M
