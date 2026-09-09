@@ -404,6 +404,9 @@ function M.setup_keymaps(tabpage)
     callback = function()
       if vim.api.nvim_get_current_tabpage() ~= tabpage then return end
       if not lifecycle.get_session(tabpage) then return end
+      -- Jumplist (<C-o>) or other navigation can leave the source buffer
+      -- without closing the peek; restore first so p keeps working.
+      peek.on_buf_enter(vim.api.nvim_get_current_buf())
       -- Panel buffers are skipped inside set_buffer_keymaps
       set_buffer_keymaps(tabpage, vim.api.nvim_get_current_buf())
     end,
