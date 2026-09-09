@@ -7,6 +7,15 @@ local export = require("review.export")
 -- Track which buffers have keymaps set and what keys were mapped
 local keymapped_buffers = {}
 
+-- Tabpage the tracked keymaps belong to. Review assumes a single active
+-- review tab, matching the existing global BufEnter autocmd design.
+local active_tabpage = nil
+
+-- Priority of review's close map inside codediff's slot arbiter. Codediff
+-- claims view.quit ("q") at default priority; review deliberately overrides
+-- it on diff buffers so q always means export-and-close in a Review session.
+local CLOSE_PRIORITY = 10
+
 --- Check if a keymap is enabled (not false, nil, or empty string)
 ---@param key string|false|nil
 ---@return boolean
@@ -14,12 +23,47 @@ local function is_enabled(key)
   return key ~= nil and key ~= false and key ~= ""
 end
 
+--- Install one mapping, owned by the codediff session registry when possible.
+--- Registry ownership means layout toggles retire/reinstall review maps
+--- alongside codediff's instead of racing them. Falls back to a plain
+--- buffer-local map when codediff is unavailable.
+---@param tabpage number
+---@param bufnr number
+---@param mode string
+---@param lhs string|false|nil
+---@param rhs function|string
+---@param desc string
+---@param priority number|nil
+---@return {string, string}|nil tracked entry on success
+local function install_keymap(tabpage, bufnr, mode, lhs, rhs, desc, priority)
+  if not is_enabled(lhs) then
+    return nil
+  end
+  local opts = { noremap = true, silent = true, nowait = true, desc = desc }
+  local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
+  if ok and lifecycle.set_buf_keymap then
+    local meta = priority and { priority = priority } or nil
+    if lifecycle.set_buf_keymap(tabpage, bufnr, mode, lhs, rhs, opts, meta) then
+      return { mode, lhs }
+    end
+    return nil
+  end
+  vim.keymap.set(mode, lhs, rhs, vim.tbl_extend("force", opts, { buffer = bufnr }))
+  return { mode, lhs }
+end
+
 --- Delete a keymap from a buffer if it exists
+---@param tabpage number
 ---@param bufnr number
 ---@param mode string
 ---@param lhs string|nil
-local function del_keymap(bufnr, mode, lhs)
+local function del_keymap(tabpage, bufnr, mode, lhs)
   if lhs and vim.api.nvim_buf_is_valid(bufnr) then
+    local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
+    if ok and tabpage and lifecycle.del_buf_keymap then
+      lifecycle.del_buf_keymap(tabpage, bufnr, mode, lhs)
+      return
+    end
     pcall(vim.keymap.del, mode, lhs, { buffer = bufnr })
   end
 end
@@ -30,7 +74,7 @@ local function clear_buffer_keymaps(bufnr)
   local tracked = keymapped_buffers[bufnr]
   if tracked then
     for _, entry in ipairs(tracked) do
-      del_keymap(bufnr, entry[1], entry[2])
+      del_keymap(active_tabpage, bufnr, entry[1], entry[2])
     end
   end
 end
@@ -139,6 +183,8 @@ local function show_help()
   add_section(nav_entries, "Navigation", lines, max_key_width)
   add_section(action_entries, "Actions", lines, max_key_width)
   table.insert(lines, "")
+  table.insert(lines, "  q overrides codediff's quit here: export & close")
+  table.insert(lines, "")
 
   local max_line_width = 0
   for _, line in ipairs(lines) do
@@ -180,27 +226,50 @@ local function show_help()
   help_popup:map("n", "<Esc>", close_help, map_opts)
 end
 
+--- True when bufnr is a diff buffer owned by the session.
+--- Explorer/history panels are intentionally excluded: codediff owns the
+--- keys there (e.g. i/S/R) and review must not shadow them.
+---@param lifecycle table
+---@param tabpage number
 ---@param bufnr number
-local function set_buffer_keymaps(bufnr)
+---@return boolean
+local function is_diff_buffer(lifecycle, tabpage, bufnr)
+  if lifecycle.find_tabpage_by_buffer then
+    -- Matches original/modified/result buffers only, never panel buffers.
+    -- Covers inline layout (same session buffers) and conflict mode.
+    return lifecycle.find_tabpage_by_buffer(bufnr) == tabpage
+  end
+  local orig_buf, mod_buf = lifecycle.get_buffers(tabpage)
+  return bufnr == orig_buf or bufnr == mod_buf
+end
+
+---@param tabpage number
+---@param bufnr number
+local function set_buffer_keymaps(tabpage, bufnr)
   -- Clear existing keymaps first
   clear_buffer_keymaps(bufnr)
+
+  local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
+  if ok and not is_diff_buffer(lifecycle, tabpage, bufnr) then
+    return
+  end
 
   local cfg = config.get()
   local km = cfg.keymaps
   local readonly = cfg.codediff.readonly
   local mapped = {}
 
-  local function set(lhs, rhs, desc)
-    if is_enabled(lhs) then
-      vim.keymap.set("n", lhs, rhs, { buffer = bufnr, noremap = true, silent = true, nowait = true, desc = desc })
-      table.insert(mapped, { "n", lhs })
+  local function set(lhs, rhs, desc, priority)
+    local entry = install_keymap(tabpage, bufnr, "n", lhs, rhs, desc, priority)
+    if entry then
+      table.insert(mapped, entry)
     end
   end
 
-  local function set_visual(lhs, rhs, desc)
-    if is_enabled(lhs) then
-      vim.keymap.set("x", lhs, rhs, { buffer = bufnr, noremap = true, silent = true, nowait = true, desc = desc })
-      table.insert(mapped, { "x", lhs })
+  local function set_visual(lhs, rhs, desc, priority)
+    local entry = install_keymap(tabpage, bufnr, "x", lhs, rhs, desc, priority)
+    if entry then
+      table.insert(mapped, entry)
     end
   end
 
@@ -279,7 +348,9 @@ local function set_buffer_keymaps(bufnr)
       require("codediff.ui.explorer").toggle_visibility(explorer_obj)
     end
   end, "Toggle file panel")
-  set(km.close, function() require("review").close() end, "Close")
+  -- Close deliberately overrides codediff's view.quit on diff buffers so
+  -- q always means export-and-close inside a Review session.
+  set(km.close, function() require("review").close() end, "Close", CLOSE_PRIORITY)
   set(km.toggle_readonly, function() require("review").toggle_readonly() end, "Toggle readonly mode")
   set(km.show_help, show_help, "Show help")
 
@@ -308,9 +379,10 @@ function M.setup_keymaps(tabpage)
     clear_buffer_keymaps(bufnr)
   end
   keymapped_buffers = {}
+  active_tabpage = tabpage
 
   -- Set keymaps on current buffer
-  set_buffer_keymaps(vim.api.nvim_get_current_buf())
+  set_buffer_keymaps(tabpage, vim.api.nvim_get_current_buf())
 
   -- Set up autocmd to apply keymaps when entering any buffer in this tabpage
   vim.api.nvim_create_autocmd("BufEnter", {
@@ -318,7 +390,8 @@ function M.setup_keymaps(tabpage)
     callback = function()
       if vim.api.nvim_get_current_tabpage() ~= tabpage then return end
       if not lifecycle.get_session(tabpage) then return end
-      set_buffer_keymaps(vim.api.nvim_get_current_buf())
+      -- Panel buffers are skipped inside set_buffer_keymaps
+      set_buffer_keymaps(tabpage, vim.api.nvim_get_current_buf())
     end,
   })
 end
@@ -339,12 +412,14 @@ function M.cleanup()
   end
   close_help()
   M.clear_keymaps()
+  active_tabpage = nil
 end
 
 M._test = {
   format_key = format_key,
   add_section = add_section,
   is_enabled = is_enabled,
+  is_diff_buffer = is_diff_buffer,
 }
 
 return M
