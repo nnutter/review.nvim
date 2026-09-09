@@ -14,6 +14,7 @@ Inspired by [tuicr](https://github.com/agavra/tuicr).
 - Export format optimized for AI conversations
 - Send comments directly to [sidekick.nvim](https://github.com/folke/sidekick.nvim) for AI chat
 - Commit picker modal to select specific commits to review
+- Temporarily peek the current source file without leaving the review
 - Built on top of codediff.nvim
 
 ## Requirements
@@ -66,7 +67,7 @@ Using lazy.nvim:
 
 Open a review with `:Review` to see your staged and unstaged changes in a side-by-side diff, or `:Review commits` if you want to pick specific commits to review. The diff opens in a new tab with a file panel on the left.
 
-Navigate between files with `<Tab>` and `<S-Tab>`. Toggle the file panel with `f`. Press `t` to toggle between side-by-side and inline layout. Switch between the old (left) and new (right) panes with `<C-w>h` and `<C-w>l`. When you spot something worth commenting on, press `i` on the line and pick a comment type from the menu (note, suggestion, issue, praise). The comment renders inline as a box below the line with a sign icon in the gutter.
+Navigate between files with `<Tab>` and `<S-Tab>`. Toggle the file panel with `f`. Press `t` to toggle between side-by-side and inline layout. Switch between the old (left) and new (right) panes with `<C-w>h` and `<C-w>l`. Press `p` to temporarily replace the focused diff pane with the current source file; press `q` or `<Esc>` to return to the review. When you spot something worth commenting on, press `i` on the line and pick a comment type from the menu (note, suggestion, issue, praise). The comment renders inline as a box below the line with a sign icon in the gutter.
 
 For multi-line comments, visually select the range first then press `i`. For file-level comments that apply to the whole file, press `F`. Comments on the left (old) side of the diff only show on that side, and same for the right (new) side.
 
@@ -102,6 +103,7 @@ file explorer/history panels keep codediff's own keys (`i`, `S`, `R`,
 | `[n` | Jump to previous comment |
 | `C` | Export to clipboard and show preview |
 | `S` | Send comments to sidekick.nvim |
+| `p` | Peek source file; `q`/`<Esc>` returns to review |
 | `<C-r>` | Clear all comments |
 | `q` | Export & close review (overrides codediff's quit, see below) |
 | `?` | Show review help |
@@ -156,6 +158,7 @@ All keymaps can be set to `false` to disable them.
 | `next_file` | `<Tab>` | Next file |
 | `prev_file` | `<S-Tab>` | Previous file |
 | `toggle_file_panel` | `f` | Toggle file panel |
+| `peek_source` | `p` | Peek source file |
 | `list_comments` | `c` | List all comments |
 | `export_clipboard` | `C` | Export to clipboard |
 | `send_sidekick` | `S` | Send comments to sidekick |
