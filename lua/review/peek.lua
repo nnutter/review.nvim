@@ -402,6 +402,32 @@ function M.on_session_closed()
   state = nil
 end
 
+--- Close peek when the user leaves the source buffer without using
+--- |M.close()|, e.g. jumplist (`<C-o>`) navigation back to the diff
+--- buffer. The keymaps `BufEnter` handler calls this before re-applying
+--- review mappings so stale state cannot wedge `p`.
+---@param bufnr number|nil entered buffer
+function M.on_buf_enter(bufnr)
+  local current = state
+  if not current then
+    return
+  end
+  -- Open is still swapping buffers; the source buffer is not known yet.
+  if current.source_bufnr == nil then
+    return
+  end
+  local entered = bufnr or vim.api.nvim_get_current_buf()
+  if entered == current.source_bufnr then
+    return
+  end
+  -- Only the peek window leaving the source buffer ends the peek.
+  -- Activity in other windows must not steal the peek window's focus.
+  if vim.api.nvim_get_current_win() ~= current.win then
+    return
+  end
+  M.close()
+end
+
 function M.clear_keymaps(bufnr)
   if not is_valid_buffer(bufnr) then
     return
