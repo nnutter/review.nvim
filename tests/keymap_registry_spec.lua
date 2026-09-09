@@ -101,6 +101,23 @@ describe("review.keymaps registry", function()
     assert.equals(#installed, #removed)
   end)
 
+  it("re-applies maps for one buffer when given its tabpage", function()
+    keymaps.cleanup()
+    installed = {}
+    keymaps.apply_for_buffer(tabpage, diff1)
+    assert.is_true(#installed > 0)
+    for _, call in ipairs(installed) do
+      assert.equals(diff1, call.bufnr)
+    end
+  end)
+
+  it("ignores apply_for_buffer without a tabpage", function()
+    keymaps.cleanup()
+    installed = {}
+    keymaps.apply_for_buffer(nil, diff1)
+    assert.equals(0, #installed)
+  end)
+
   it("falls back to plain buffer maps when the registry API is missing", function()
     keymaps.cleanup()
     package.loaded["codediff.ui.lifecycle"] = {

@@ -412,10 +412,11 @@ end
 
 -- Re-apply mappings to one buffer, e.g. after source peek replaced it
 -- temporarily.
+---@param tabpage number
 ---@param bufnr number
-function M.apply_for_buffer(bufnr)
-  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
-    set_buffer_keymaps(bufnr)
+function M.apply_for_buffer(tabpage, bufnr)
+  if tabpage and bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    set_buffer_keymaps(tabpage, bufnr)
   end
 end
 

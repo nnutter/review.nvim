@@ -322,7 +322,7 @@ function M.open()
 
   -- Strip the review mappings from the source buffer (it must not answer to
   -- q/close) and install the peek mappings; other buffers are left untouched.
-  require("review.keymaps").apply_for_buffer(source_bufnr)
+  require("review.keymaps").apply_for_buffer(tabpage, source_bufnr)
 
   local source_line = cursor[1]
   if current_bufnr == original_bufnr then
@@ -376,14 +376,14 @@ function M.close()
   -- session's diff buffers (working-tree side) whose mappings were stripped.
   local keymaps_ok, keymaps = pcall(require, "review.keymaps")
   if keymaps_ok then
-    keymaps.apply_for_buffer(current.diff_bufnr)
+    keymaps.apply_for_buffer(current.tabpage, current.diff_bufnr)
     if current.source_bufnr ~= current.diff_bufnr then
       local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
       local session = ok and lifecycle.get_session(current.tabpage) or nil
       if session then
         local orig_bufnr, mod_bufnr = lifecycle.get_buffers(current.tabpage)
         if current.source_bufnr == orig_bufnr or current.source_bufnr == mod_bufnr then
-          keymaps.apply_for_buffer(current.source_bufnr)
+          keymaps.apply_for_buffer(current.tabpage, current.source_bufnr)
         end
       end
     end
