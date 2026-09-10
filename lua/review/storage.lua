@@ -13,6 +13,11 @@ function M.clear_revisions()
   current_revisions = nil
 end
 
+---@return {rev1: string, rev2: string}|nil
+function M.get_revisions()
+  return current_revisions
+end
+
 ---@return string|nil
 local function get_git_root()
   local handle = io.popen("git rev-parse --show-toplevel 2>/dev/null")

@@ -4,6 +4,7 @@ local M = {}
 ---@field comment_types table<string, CommentType>
 ---@field keymaps ReviewKeymaps
 ---@field codediff ReviewCodediffConfig
+---@field commit_info ReviewCommitInfoConfig
 
 ---@class CommentType
 ---@field key string
@@ -44,6 +45,10 @@ local M = {}
 
 ---@class ReviewCodediffConfig
 ---@field readonly boolean
+
+---@class ReviewCommitInfoConfig
+---@field enabled boolean
+---@field height number
 
 ---@type ReviewConfig
 M.defaults = {
@@ -91,6 +96,10 @@ M.defaults = {
   },
   codediff = {
     readonly = true,
+  },
+  commit_info = {
+    enabled = true,
+    height = 10,
   },
 }
 
