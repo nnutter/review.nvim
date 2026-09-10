@@ -123,6 +123,11 @@ All fields are optional; defaults are shown.
         readonly = true,
       },
 
+      commit_info = {
+        enabled = true,
+        height = 10,
+      },
+
       keymaps = { ... },  -- see |review-keymaps|
     })
 <
@@ -132,6 +137,17 @@ codediff.readonly ~
     When true (default), diff buffers are readonly and simple single-key
     keymaps are active (e.g. `i` to add comment). When false, leader-based
     keymaps are used instead. Toggle at runtime with `R`.
+
+                                                     *review-config-commit-info*
+commit_info.enabled ~
+    When true (default), commit reviews show a commit-info pane stacked
+    above the file list. A single commit shows subject, author/date, and
+    body; multiple commits show one `short subject` line each.
+    Hidden for working-tree reviews and with the file panel (`f`).
+
+commit_info.height ~
+    Max height of the commit-info pane (default: 10). Single-commit
+    bodies are truncated to fit.
 
 ==============================================================================
 5. KEYMAPS                                                   *review-keymaps*
@@ -222,6 +238,8 @@ calling setup() or in a |ColorScheme| autocommand.
   `ReviewPickerHash`        Identifier        Commit hash in picker
   `ReviewPickerMeta`        Comment           Author/date in picker
   `ReviewPickerSelected`    String            Selected commit marker
+  `ReviewCommitHash`        Identifier        Short hash in commit-info pane
+  `ReviewCommitMeta`        Comment           Author/date in commit-info pane
 
   Group                   Default bg        Usage ~
   `ReviewNoteLine`          #0d1f28           Note line background

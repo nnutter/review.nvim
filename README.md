@@ -14,6 +14,7 @@ Inspired by [tuicr](https://github.com/agavra/tuicr).
 - Export format optimized for AI conversations
 - Send comments directly to [sidekick.nvim](https://github.com/folke/sidekick.nvim) for AI chat
 - Commit picker modal to select specific commits to review
+- Commit-info pane above the file list (subject/body for one commit, short + subject for many)
 - Temporarily peek the current source file without leaving the review
 - Built on top of codediff.nvim
 
@@ -193,6 +194,10 @@ require("review").setup({
   },
   codediff = {
     readonly = true,
+  },
+  commit_info = {
+    enabled = true,
+    height = 10,
   },
 })
 ```
