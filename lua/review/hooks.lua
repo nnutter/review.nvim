@@ -298,6 +298,16 @@ function M.on_session_created(tabpage)
   vim.defer_fn(function()
     M._focus_modified_pane(lifecycle, tabpage)
   end, 150)
+
+  -- Show the commit-info pane above the explorer (commit reviews only;
+  -- deferred so the explorer window exists). Re-runs on CodeDiffFileSelect
+  -- via on_session_created, refreshing content for the same range.
+  vim.defer_fn(function()
+    if current_tabpage ~= tabpage then
+      return
+    end
+    pcall(require("review.commit_info").show, tabpage)
+  end, 250)
 end
 
 function M._focus_modified_pane(lifecycle, tabpage)
@@ -314,6 +324,7 @@ end
 -- Called when codediff session is closed
 function M.on_session_closed()
   require("review.peek").on_session_closed()
+  pcall(require("review.commit_info").hide)
   current_tabpage = nil
   -- Clean up autocmds
   if buf_augroup then

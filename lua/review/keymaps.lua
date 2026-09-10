@@ -359,6 +359,11 @@ local function set_buffer_keymaps(tabpage, bufnr)
     local explorer_obj = lifecycle.get_explorer(tabpage)
     if explorer_obj then
       require("codediff.ui.explorer").toggle_visibility(explorer_obj)
+      -- Keep the commit-info pane with the sidebar: it lives stacked
+      -- above the explorer, so hide/show it together.
+      vim.defer_fn(function()
+        pcall(require("review.commit_info").sync_with_explorer, tabpage)
+      end, 50)
     end
   end, "Toggle file panel")
   -- Close deliberately overrides codediff's view.quit on diff buffers so

@@ -214,9 +214,185 @@ function M.format_lines(commits, max_lines)
   return lines
 end
 
+-- ============================================================================
+-- Sidebar pane (window stacked above the codediff explorer)
+-- ============================================================================
+
+---@type number|nil scratch buffer for the pane
+local info_bufnr = nil
+---@type number|nil window id for the pane
+local info_winid = nil
+---@type number|nil tabpage the pane belongs to
+local info_tabpage = nil
+
+local ns_commit = vim.api.nvim_create_namespace("review_commit_info")
+
+---@return number|nil explorer window or nil when hidden/absent
+local function explorer_winid(tabpage)
+  local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
+  if not ok or not lifecycle.get_explorer then
+    return nil
+  end
+  local ok2, explorer = pcall(lifecycle.get_explorer, tabpage)
+  if not ok2 or not explorer then
+    return nil
+  end
+  if explorer.is_hidden then
+    return nil
+  end
+  local win = explorer.split and explorer.split.winid or explorer.winid
+  if win and vim.api.nvim_win_is_valid(win) then
+    return win
+  end
+  if explorer.winid and vim.api.nvim_win_is_valid(explorer.winid) then
+    return explorer.winid
+  end
+  return nil
+end
+
+local function ensure_buffer()
+  if info_bufnr and vim.api.nvim_buf_is_valid(info_bufnr) then
+    return info_bufnr
+  end
+  info_bufnr = vim.api.nvim_create_buf(false, true)
+  pcall(vim.api.nvim_buf_set_name, info_bufnr, "review://commit-info")
+  vim.api.nvim_set_option_value("buftype", "nofile", { buf = info_bufnr })
+  vim.api.nvim_set_option_value("bufhidden", "hide", { buf = info_bufnr })
+  vim.api.nvim_set_option_value("swapfile", false, { buf = info_bufnr })
+  vim.api.nvim_set_option_value("modifiable", false, { buf = info_bufnr })
+  vim.api.nvim_set_option_value("filetype", "review-commit-info", { buf = info_bufnr })
+  return info_bufnr
+end
+
+---Highlight the leading short hash on each line.
+---@param bufnr number
+---@param lines string[]
+local function apply_highlights(bufnr, lines)
+  vim.api.nvim_buf_clear_namespace(bufnr, ns_commit, 0, -1)
+  for row, line in ipairs(lines) do
+    local hash = line:match("^(%S+)")
+    if hash then
+      pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_commit, row - 1, 0, {
+        end_col = #hash,
+        hl_group = "ReviewCommitHash",
+        priority = 200,
+      })
+    end
+    if row == 2 and #lines > 2 then
+      -- Author/Date meta line for the single-commit layout.
+      pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_commit, row - 1, 0, {
+        end_col = #line,
+        hl_group = "ReviewCommitMeta",
+        priority = 200,
+      })
+    end
+  end
+end
+
+---@return boolean visible
+function M.is_visible()
+  return info_winid ~= nil and vim.api.nvim_win_is_valid(info_winid)
+end
+
+---Show (or refresh) the commit-info pane for a tabpage.
+---No-op when disabled, non-commit mode, or the explorer is hidden.
+---@param tabpage number|nil current tab when nil
+---@return boolean shown
+function M.show(tabpage)
+  tabpage = tabpage or vim.api.nvim_get_current_tabpage()
+  local cfg_ok, cfg = pcall(require, "review.config")
+  local commit_cfg = (cfg_ok and cfg.get and cfg.get().commit_info) or { enabled = true, height = 10 }
+  if commit_cfg.enabled == false then
+    M.hide()
+    return false
+  end
+  local max_lines = commit_cfg.height or 10
+
+  local ctx = M.get_context(tabpage)
+  if not ctx then
+    M.hide()
+    return false
+  end
+  local commits = M.list_commits(ctx.git_root, ctx.base, ctx.target)
+  if #commits == 0 then
+    M.hide()
+    return false
+  end
+  local lines = M.format_lines(commits, max_lines)
+  if #lines == 0 then
+    M.hide()
+    return false
+  end
+
+  local exp_win = explorer_winid(tabpage)
+  if not exp_win then
+    M.hide()
+    return false
+  end
+
+  local buf = ensure_buffer()
+  vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+  apply_highlights(buf, lines)
+
+  local height = math.min(#lines, max_lines)
+  if M.is_visible() and info_tabpage == tabpage then
+    pcall(vim.api.nvim_win_set_height, info_winid, height)
+    return true
+  end
+
+  M.hide()
+  local ok, win = pcall(vim.api.nvim_open_win, buf, false, {
+    split = "above",
+    win = exp_win,
+    height = height,
+  })
+  if not ok or not win then
+    return false
+  end
+  info_winid = win
+  info_tabpage = tabpage
+  pcall(vim.api.nvim_set_option_value, "number", false, { win = win })
+  pcall(vim.api.nvim_set_option_value, "relativenumber", false, { win = win })
+  pcall(vim.api.nvim_set_option_value, "cursorline", false, { win = win })
+  pcall(vim.api.nvim_set_option_value, "wrap", true, { win = win })
+  pcall(vim.api.nvim_set_option_value, "signcolumn", "no", { win = win })
+  pcall(vim.api.nvim_set_option_value, "winfixheight", true, { win = win })
+  return true
+end
+
+function M.hide()
+  if info_winid and vim.api.nvim_win_is_valid(info_winid) then
+    pcall(vim.api.nvim_win_hide, info_winid)
+  end
+  info_winid = nil
+  info_tabpage = nil
+end
+
+---Toggle the pane to match the explorer after `f` flips visibility.
+---Call after codediff's toggle_visibility has run.
+---@param tabpage number|nil
+function M.sync_with_explorer(tabpage)
+  tabpage = tabpage or vim.api.nvim_get_current_tabpage()
+  if explorer_winid(tabpage) then
+    M.show(tabpage)
+  else
+    M.hide()
+  end
+end
+
 M._test = {
   resolve_mode = resolve_mode,
   parse_record = parse_record,
+  _state = function()
+    return { buf = info_bufnr, win = info_winid, tab = info_tabpage }
+  end,
+  _reset = function()
+    info_bufnr = nil
+    info_winid = nil
+    info_tabpage = nil
+  end,
 }
 
 return M
