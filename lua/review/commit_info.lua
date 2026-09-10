@@ -351,7 +351,7 @@ function M.show(tabpage)
   vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
   apply_highlights(buf, lines, #commits == 1)
 
-  local height = math.min(#lines, max_lines)
+  local height = max_lines
   if M.is_visible() and info_tabpage == tabpage then
     pcall(vim.api.nvim_win_set_height, info_winid, height)
     return true
