@@ -61,6 +61,41 @@ describe("review.commit_info", function()
     end)
   end)
 
+  describe("apply_highlights", function()
+    local ns = vim.api.nvim_create_namespace("review_commit_info")
+
+    local function marks(buf)
+      return vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })
+    end
+
+    it("highlights hash and meta only for single commits, never the body", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local lines = { "abc1234 Fix bug", "Author: Ada  Date: 2026-09-10", "", "first word body" }
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+      commit_info._test.apply_highlights(buf, lines, true)
+      local ext = marks(buf)
+      -- row 0: hash, row 1: meta, rows 2-3: none
+      assert.equals(2, #ext)
+      assert.equals(0, ext[1][2])
+      assert.equals("ReviewCommitHash", ext[1][4].hl_group)
+      assert.equals(1, ext[2][2])
+      assert.equals("ReviewCommitMeta", ext[2][4].hl_group)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("highlights every hash for multiple commits", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local lines = { "def4567 Newest", "abc1234 Oldest" }
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+      commit_info._test.apply_highlights(buf, lines, false)
+      local ext = marks(buf)
+      assert.equals(2, #ext)
+      assert.equals("ReviewCommitHash", ext[1][4].hl_group)
+      assert.equals("ReviewCommitHash", ext[2][4].hl_group)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
+
   describe("list_commits", function()
     it("returns empty for missing args", function()
       assert.same({}, commit_info.list_commits("", "abc", "def"))

@@ -264,27 +264,42 @@ local function ensure_buffer()
   return info_bufnr
 end
 
----Highlight the leading short hash on each line.
+---Highlight commit hashes and the author/date meta line.
+---Single-commit layout: hash on row 1 only, meta on row 2, body plain.
+---Multi-commit layout: leading hash on every row.
 ---@param bufnr number
 ---@param lines string[]
-local function apply_highlights(bufnr, lines)
+---@param is_single boolean
+local function apply_highlights(bufnr, lines, is_single)
   vim.api.nvim_buf_clear_namespace(bufnr, ns_commit, 0, -1)
   for row, line in ipairs(lines) do
-    local hash = line:match("^(%S+)")
-    if hash then
-      pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_commit, row - 1, 0, {
-        end_col = #hash,
-        hl_group = "ReviewCommitHash",
-        priority = 200,
-      })
-    end
-    if row == 2 and #lines > 2 then
-      -- Author/Date meta line for the single-commit layout.
-      pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_commit, row - 1, 0, {
-        end_col = #line,
-        hl_group = "ReviewCommitMeta",
-        priority = 200,
-      })
+    if is_single then
+      if row == 1 then
+        local hash = line:match("^(%S+)")
+        if hash then
+          pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_commit, row - 1, 0, {
+            end_col = #hash,
+            hl_group = "ReviewCommitHash",
+            priority = 200,
+          })
+        end
+      elseif row == 2 then
+        -- Author/Date meta line for the single-commit layout.
+        pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_commit, row - 1, 0, {
+          end_col = #line,
+          hl_group = "ReviewCommitMeta",
+          priority = 200,
+        })
+      end
+    else
+      local hash = line:match("^(%S+)")
+      if hash then
+        pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_commit, row - 1, 0, {
+          end_col = #hash,
+          hl_group = "ReviewCommitHash",
+          priority = 200,
+        })
+      end
     end
   end
 end
@@ -334,7 +349,7 @@ function M.show(tabpage)
   vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-  apply_highlights(buf, lines)
+  apply_highlights(buf, lines, #commits == 1)
 
   local height = math.min(#lines, max_lines)
   if M.is_visible() and info_tabpage == tabpage then
@@ -385,6 +400,7 @@ end
 M._test = {
   resolve_mode = resolve_mode,
   parse_record = parse_record,
+  apply_highlights = apply_highlights,
   _state = function()
     return { buf = info_bufnr, win = info_winid, tab = info_tabpage }
   end,
